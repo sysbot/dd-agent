@@ -99,8 +99,8 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         self.run_check(config)
 
         # A WMISampler is cached
-        self.assertIn("myhost:some/namespace:Win32_OperatingSystem", self.check.wmi_samplers)
-        wmi_sampler = self.check.wmi_samplers["myhost:some/namespace:Win32_OperatingSystem"]
+        self.assertInPartial("myhost:some/namespace:Win32_OperatingSystem", self.check.wmi_samplers)
+        wmi_sampler = self.getProp(self.check.wmi_samplers, "myhost:some/namespace:Win32_OperatingSystem")
 
         # Connection was established with the right parameters
         self.assertWMIConn(wmi_sampler, "myhost")
@@ -135,9 +135,9 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         self.run_check(config)
 
         # WMI props are cached
-        self.assertIn("myhost:some/namespace:Win32_OperatingSystem", self.check.wmi_props)
+        self.assertInPartial("myhost:some/namespace:Win32_OperatingSystem", self.check.wmi_props)
         metric_name_and_type_by_property, properties = \
-            self.check.wmi_props["myhost:some/namespace:Win32_OperatingSystem"]
+            self.getProp(self.check.wmi_props, "myhost:some/namespace:Win32_OperatingSystem")
 
         # Assess
         self.assertEquals(
@@ -204,8 +204,9 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         # Increase WMI queries' runtime
         SWbemServices._exec_query_run_time = 0.5
 
-        # Patch WMISampler to decrease timeout tolerancy
-        WMISampler = self.load_class("WMISampler")
+        # Patch WMISampler to decrease timeout tolerance
+        from checks.libs.wmi.sampler import WMISampler
+
         wmi_constructor = WMISampler.__init__
         WMISampler.__init__ = __patched_init__
 
@@ -252,12 +253,12 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         self.run_check(config)
 
         # WMI props are cached
-        self.assertIn(
+        self.assertInPartial(
             "localhost:root\\cimv2:Win32_PerfFormattedData_PerfProc_Process",
             self.check.wmi_props
         )
         _, properties = \
-            self.check.wmi_props["localhost:root\\cimv2:Win32_PerfFormattedData_PerfProc_Process"]
+            self.getProp(self.check.wmi_props, "localhost:root\\cimv2:Win32_PerfFormattedData_PerfProc_Process")
 
         self.assertEquals(properties, ["IOReadBytesPerSec", "IDProcess"])
 

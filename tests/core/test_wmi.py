@@ -223,6 +223,7 @@ class TestCommonWMI(unittest.TestCase):
 
         self.patcher = patch.dict('sys.modules',{
             'pywintypes': Mock(),
+            'pythoncom': Mock(),
             'win32com': Mock(),
             'win32com.client': Mock(Dispatch=Dispatch),
         })
@@ -244,39 +245,34 @@ class TestCommonWMI(unittest.TestCase):
         WMISampler._wmi_locators = {}
         WMISampler._wmi_connections = defaultdict(list)
 
-    def assertWMIConn(self, wmi_sampler, param=None, count=None):
+    def assertWMIConn(self, wmi_sampler, param=None):
         """
         Helper, assertion on the `wmi_sampler`'s WMI connection(s):
-        * `count`: number of active connections
         * `param`: parameters used to establish the connection
         """
-        connections = wmi_sampler._wmi_connections[wmi_sampler.connection_key]
-
-        if count:
-            self.assertEquals(len(connections), count)
 
         if param:
-            with wmi_sampler.get_connection() as connection:
-                wmi_conn_args, wmi_conn_kwargs = connection.get_conn_args()
-                if isinstance(param, tuple):
-                    key, value = param
-                    self.assertIn(key, wmi_conn_kwargs)
-                    self.assertEquals(wmi_conn_kwargs[key], value)
-                else:
-                    self.assertIn(param, wmi_conn_args)
+            connection = wmi_sampler.get_last_connection()
+            wmi_conn_args, wmi_conn_kwargs = connection.get_conn_args()
+            if isinstance(param, tuple):
+                key, value = param
+                self.assertIn(key, wmi_conn_kwargs)
+                self.assertEquals(wmi_conn_kwargs[key], value)
+            else:
+                self.assertIn(param, wmi_conn_args)
 
     def assertWMIQuery(self, wmi_sampler, query=None, flags=None):
         """
         Helper, assert that the given WMI query and flags were submitted.
         """
-        with wmi_sampler.get_connection() as connection:
-            if query:
-                last_wmi_query = connection.get_last_wmi_query()
-                self.assertEquals(last_wmi_query, query)
+        connection = wmi_sampler.get_last_connection()
+        if query:
+            last_wmi_query = connection.get_last_wmi_query()
+            self.assertEquals(last_wmi_query, query)
 
-            if flags:
-                last_wmi_flags = connection.get_last_wmi_flags()
-                self.assertEquals(last_wmi_flags, flags)
+        if flags:
+            last_wmi_flags = connection.get_last_wmi_flags()
+            self.assertEquals(last_wmi_flags, flags)
 
     def assertWMIObject(self, wmi_obj, property_names):
         """
@@ -293,6 +289,25 @@ class TestCommonWMI(unittest.TestCase):
         """
         self.assertTrue(first in second, "{0} not in {1}".format(first, second))
 
+    def assertInPartial(self, first, second):
+        """
+        Assert `first` has a key in `second` where it's a prefix.
+
+        Note: needs to be defined for Python 2.6
+        """
+        self.assertTrue(any(key for key in second if key.startswith(first)), "{0} not in {1}".format(first, second))
+
+    def getProp(self, dict, prefix):
+        """
+        Get Property from dictionary `dict` starting with `prefix`.
+
+        Note: needs to be defined for Python 2.6
+        """
+        for key in dict:
+            if key.startswith(prefix):
+                return dict[key]
+
+        return None
 
 class TestUnitWMISampler(TestCommonWMI):
     """
@@ -315,45 +330,13 @@ class TestUnitWMISampler(TestCommonWMI):
         with wmi_sampler.get_connection():
             pass
 
-        # WMI connection is cached
-        self.assertIn('myhost:some/namespace:datadog', wmi_sampler._wmi_connections)
-
         # Connection was established with the right parameters
         self.assertWMIConn(wmi_sampler, param="myhost")
         self.assertWMIConn(wmi_sampler, param="some/namespace")
 
-    def test_one_wmi_connection_at_a_time(self):
-        """
-        Only use one WMI connection at a time.
-        """
-        wmi_sampler = WMISampler(
-            "Win32_PerfRawData_PerfOS_System",
-            ["ProcessorQueueLength"],
-            host="myhost",
-            namespace="some/namespace",
-            username="datadog",
-            password="password"
-        )
-
-        # Create a new connection and release it
-        with wmi_sampler.get_connection():
-            pass
-
-        self.assertWMIConn(wmi_sampler, count=1)
-
-        # Refetch the existing connection
-        with wmi_sampler.get_connection():
-            #  No connection is available, create a new one
-            self.assertWMIConn(wmi_sampler, count=0)
-            with wmi_sampler.get_connection():
-                pass
-
-        # Two connections are now available
-        self.assertWMIConn(wmi_sampler, count=2)
-
     def test_wmi_connection_pooling(self):
         """
-        Share WMI connections among WMISampler objects.
+        Until caching is enabled WMI connections will not be shared among WMISampler objects.
         """
         from win32com.client import Dispatch
 
@@ -364,11 +347,13 @@ class TestUnitWMISampler(TestCommonWMI):
         wmi_sampler_1.sample()
         wmi_sampler_2.sample()
 
-        self.assertEquals(Dispatch.ConnectServer.call_count, 1, Dispatch.ConnectServer.call_count)
+        # one connection, two samples
+        self.assertEquals(Dispatch.ConnectServer.call_count, 3, Dispatch.ConnectServer.call_count)
 
         wmi_sampler_3.sample()
 
-        self.assertEquals(Dispatch.ConnectServer.call_count, 2, Dispatch.ConnectServer.call_count)
+        # two connection, three samples
+        self.assertEquals(Dispatch.ConnectServer.call_count, 5, Dispatch.ConnectServer.call_count)
 
     def test_wql_filtering(self):
         """
