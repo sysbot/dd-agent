@@ -312,7 +312,7 @@ class WMISampler(object):
                 if isinstance(value, tuple):
                     oper = value[0]
                     value = value[1]
-                elif isinstance(value, basestring) and ('*' in value or '%' in value):
+                elif isinstance(value, basestring) and '%' in value:
                     oper = 'LIKE'
                 else:
                     oper = '='
@@ -323,7 +323,7 @@ class WMISampler(object):
 
                     internal_filter = map(lambda x:
                                           (prop, x) if isinstance(x, tuple)
-                                          else (prop, ('LIKE', x)) if ('*' in x or '%' in x)
+                                          else (prop, ('LIKE', x)) if '%' in x
                                           else (prop, (oper, x)), value)
 
                     bool_op = ' OR '

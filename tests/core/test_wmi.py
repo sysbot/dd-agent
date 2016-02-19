@@ -415,8 +415,8 @@ class TestUnitWMISampler(TestCommonWMI):
         format_filter = sampler.WMISampler._format_filter
 
         # Check `_format_filter` logic
-        filters = [{'Name': "Foo%"}, {'Name': "Bar*", 'Id': ('>=', "SomeId")}, {'Name': "Zulu"}]
-        self.assertEquals(" WHERE ( Name = 'Zulu' ) OR ( Name LIKE 'Bar*' AND Id >= 'SomeId' ) OR ( Name LIKE 'Foo%' )",
+        filters = [{'Name': "Foo%"}, {'Name': "Bar%", 'Id': ('>=', "SomeId")}, {'Name': "Zulu"}]
+        self.assertEquals(" WHERE ( Name = 'Zulu' ) OR ( Name LIKE 'Bar%' AND Id >= 'SomeId' ) OR ( Name LIKE 'Foo%' )",
                           format_filter(filters))
 
     def test_wql_eventlog_filtering(self):
